@@ -56,6 +56,10 @@ extern CustomSerial Serial1;
 #endif
 #endif
 
+#define MARLIN_SERIAL_is_USART2  1
+#define CUSTOM_SERIAL_is_USART1  1
+#define MULTIPLEX_MARLIN_SERIAL  0
+
 #include "MarlinConfig.h"
 #include "MarlinSerial.h"
 #include "Marlin.h"
