@@ -360,7 +360,7 @@ void loop(void);
 // code (~500 bytes), there is no harm in always selecting this option on
 // the off chance that the extra fan output is available.
 //
-#define CONFIGURE_FAN1_AND_EXTRA_IO  1
+#define CONFIGURE_FAN1_AND_EXTRA_IO  0
 
 
 // must match pin description file, pins_MALYAN_M300.h

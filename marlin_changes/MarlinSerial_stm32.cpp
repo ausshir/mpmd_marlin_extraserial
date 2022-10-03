@@ -41,6 +41,7 @@
 // custom serial
 #define CS_PACING_TX  0  // (ms) tx (blocking) wait if buffer is full
 #define QTIMER_DELAY  0  // (ms) idle time before flushing tx buffer
+#define USE_USART2    1  // Enable USART2 on PA2/PA3 instead of USB for communication
 
 #if MB(MALYAN_M300)
 extern CustomSerial Serial1;
