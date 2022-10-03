@@ -690,137 +690,6 @@ void msrx_resume(void)
 #endif // MARLIN_SERIAL_is_USB
 
 
-#if MARLIN_SERIAL_is_USART1 || MARLIN_SERIAL_is_USART2
-/*
- * USART flavor of MarlinSerial
- */
-
-#if ! IS_POWER_OF_2(RX_BUFFER_SIZE)
-#error RX_BUFFER_SIZE must be a power of 2
-#endif
-
-#if ! IS_POWER_OF_2(TX_BUFFER_SIZE)
-#error TX_BUFFER_SIZE must be a power of 2
-#endif
-
-struct {
-    unsigned char buffer[RX_BUFFER_SIZE];
-    volatile ring_buffer_pos_t head, tail;
-} MS(rx) = { { 0 }, 0, 0 };
-
-#if TX_BUFFER_SIZE > 0
-struct {
-    unsigned char buffer[TX_BUFFER_SIZE];
-    volatile uint8_t head, tail;
-} MS(tx) = { { 0 }, 0, 0 };
-#endif
-
-void MarlinSerial::begin(const long baud)
-{
-    HAL_usart_init(MARLIN_SERIAL, (uint32_t) baud);
-}
-
-void MarlinSerial::end(void)
-{
-
-}
-
-int MarlinSerial::peek(void)
-{
-    return (MS(rx).head != MS(rx).tail) ? MS(rx).buffer[MS(rx).head] : -1;
-}
-
-int MarlinSerial::read(void)
-{
-    int c = -1;
-    if (MS(rx).head != MS(rx).tail) {
-	// could update max_rx_queued in isr
-	UPDATE_MAX_RX_QUEUED(available());
-	c = MS(rx).buffer[MS(rx).head];
-	MS(rx).head = (MS(rx).head+1) & RX_BUFFER_MASK;
-    }
-    return c;
-}
-
-ring_buffer_pos_t MarlinSerial::available(void)
-{
-    return (MS(rx).tail - MS(rx).head) & RX_BUFFER_MASK;
-}
-
-void MarlinSerial::flush(void)
-{
-    MS(rx).tail = MS(rx).head;
-}
-
-void MarlinSerial::write(const uint8_t c)
-{
-#if TX_BUFFER_SIZE > 0
-    ring_buffer_pos_t next = (MS(tx).tail+1) & TX_BUFFER_MASK;
-    HAL_usart_txe_1(MARLIN_SERIAL);  // enable txe interrupt
-    while (next == MS(tx).head);
-    MS(tx).buffer[MS(tx).tail] = c;
-    MS(tx).tail = next;
-#else
-    while(! HAL_usart_check(MARLIN_SERIAL, USART_TXE));
-    HAL_usart_send(MARLIN_SERIAL, c);
-#endif
-}
-
-void MarlinSerial::flushTX(void)
-{
-#if TX_BUFFER_SIZE > 0
-    while(MS(tx).head != MS(tx).tail);
-#endif
-}
-
-void MS(usart_isr)(void)
-{
-    if(HAL_usart_check(MARLIN_SERIAL, USART_RXNE)) {
-	uint8_t c = (char) HAL_usart_read(MARLIN_SERIAL);
-	ring_buffer_pos_t next = (MS(rx).tail+1) & RX_BUFFER_MASK;
-	EMERGENCY_PARSER_UPDATE(c);
-	if (next != MS(rx).head) {
-	    MS(rx).buffer[MS(rx).tail] = c;
-	    MS(rx).tail = next;
-	}
-#if ENABLED(SERIAL_STATS_DROPPED_RX)
-	else {
-	    UPDATE_RX_DROPPED_BYTES();
-	}
-    }
-#endif
-
-    // always clear overrun, just in case
-    HAL_usart_clear(MARLIN_SERIAL, USART_ORE);
-
-#if TX_BUFFER_SIZE > 0
-    if(HAL_usart_check(MARLIN_SERIAL, USART_TXE)) {
-	if (MS(tx).head != MS(tx).tail) {
-	    HAL_usart_send(MARLIN_SERIAL, MS(tx).buffer[MS(tx).head]);
-	    MS(tx).head = (MS(tx).head+1) & TX_BUFFER_MASK;
-	}
-	else {
-	    // disable txe interrupt
-	    HAL_usart_txe_0(MARLIN_SERIAL);
-	}
-    }
-#endif
-#if ENABLED(SERIAL_STATS_RX_BUFFER_OVERRUNS)
-    if(HAL_usart_check(MARLIN_SERIAL, USART_ORE)) {
-	UPDATE_RX_BUFFER_OVERUNS();
-	HAL_usart_clear(MARLIN_SERIAL, USART_ORE);
-    }
-#endif
-#if ENABLED(SERIAL_STATS_RX_FRAMING_ERRORS)
-    if(HAL_usart_check(MARLIN_SERIAL, USART_FE)) {
-	UPDATE_RX_FRAMING_ERRORS();
-	HAL_usart_clear(MARLIN_SERIAL, USART_FE);
-    }
-#endif
-}
-
-#endif // MARLIN_SERIAL_is_(USART1|USART2)
-
 
 #if CUSTOM_SERIAL_is_USART1 || CUSTOM_SERIAL_is_USART2
 /*
@@ -999,6 +868,137 @@ void CS(usart_isr)(void)
 }
 
 #endif // CUSTOM_SERIAL_is_(USART1|USART2)
+
+#if MARLIN_SERIAL_is_USART1 || MARLIN_SERIAL_is_USART2
+/*
+ * USART flavor of MarlinSerial
+ */
+
+#if ! IS_POWER_OF_2(RX_BUFFER_SIZE)
+#error RX_BUFFER_SIZE must be a power of 2
+#endif
+
+#if ! IS_POWER_OF_2(TX_BUFFER_SIZE)
+#error TX_BUFFER_SIZE must be a power of 2
+#endif
+
+struct {
+    unsigned char buffer[RX_BUFFER_SIZE];
+    volatile ring_buffer_pos_t head, tail;
+} MS(rx) = { { 0 }, 0, 0 };
+
+#if TX_BUFFER_SIZE > 0
+struct {
+    unsigned char buffer[TX_BUFFER_SIZE];
+    volatile uint8_t head, tail;
+} MS(tx) = { { 0 }, 0, 0 };
+#endif
+
+void MarlinSerial::begin(const long baud)
+{
+    HAL_usart_init(MARLIN_SERIAL, (uint32_t) baud);
+}
+
+void MarlinSerial::end(void)
+{
+
+}
+
+int MarlinSerial::peek(void)
+{
+    return (MS(rx).head != MS(rx).tail) ? MS(rx).buffer[MS(rx).head] : -1;
+}
+
+int MarlinSerial::read(void)
+{
+    int c = -1;
+    if (MS(rx).head != MS(rx).tail) {
+	// could update max_rx_queued in isr
+	UPDATE_MAX_RX_QUEUED(available());
+	c = MS(rx).buffer[MS(rx).head];
+	MS(rx).head = (MS(rx).head+1) & RX_BUFFER_MASK;
+    }
+    return c;
+}
+
+ring_buffer_pos_t MarlinSerial::available(void)
+{
+    return (MS(rx).tail - MS(rx).head) & RX_BUFFER_MASK;
+}
+
+void MarlinSerial::flush(void)
+{
+    MS(rx).tail = MS(rx).head;
+}
+
+void MarlinSerial::write(const uint8_t c)
+{
+#if TX_BUFFER_SIZE > 0
+    ring_buffer_pos_t next = (MS(tx).tail+1) & TX_BUFFER_MASK;
+    HAL_usart_txe_1(MARLIN_SERIAL);  // enable txe interrupt
+    while (next == MS(tx).head);
+    MS(tx).buffer[MS(tx).tail] = c;
+    MS(tx).tail = next;
+#else
+    while(! HAL_usart_check(MARLIN_SERIAL, USART_TXE));
+    HAL_usart_send(MARLIN_SERIAL, c);
+#endif
+}
+
+void MarlinSerial::flushTX(void)
+{
+#if TX_BUFFER_SIZE > 0
+    while(MS(tx).head != MS(tx).tail);
+#endif
+}
+
+void MS(usart_isr)(void)
+{
+    if(HAL_usart_check(MARLIN_SERIAL, USART_RXNE)) {
+	uint8_t c = (char) HAL_usart_read(MARLIN_SERIAL);
+	ring_buffer_pos_t next = (MS(rx).tail+1) & RX_BUFFER_MASK;
+	EMERGENCY_PARSER_UPDATE(c);
+	if (next != MS(rx).head) {
+	    MS(rx).buffer[MS(rx).tail] = c;
+	    MS(rx).tail = next;
+	}
+#if ENABLED(SERIAL_STATS_DROPPED_RX)
+	else {
+	    UPDATE_RX_DROPPED_BYTES();
+	}
+    }
+#endif
+
+    // always clear overrun, just in case
+    HAL_usart_clear(MARLIN_SERIAL, USART_ORE);
+
+#if TX_BUFFER_SIZE > 0
+    if(HAL_usart_check(MARLIN_SERIAL, USART_TXE)) {
+	if (MS(tx).head != MS(tx).tail) {
+	    HAL_usart_send(MARLIN_SERIAL, MS(tx).buffer[MS(tx).head]);
+	    MS(tx).head = (MS(tx).head+1) & TX_BUFFER_MASK;
+	}
+	else {
+	    // disable txe interrupt
+	    HAL_usart_txe_0(MARLIN_SERIAL);
+	}
+    }
+#endif
+#if ENABLED(SERIAL_STATS_RX_BUFFER_OVERRUNS)
+    if(HAL_usart_check(MARLIN_SERIAL, USART_ORE)) {
+	UPDATE_RX_BUFFER_OVERUNS();
+	HAL_usart_clear(MARLIN_SERIAL, USART_ORE);
+    }
+#endif
+#if ENABLED(SERIAL_STATS_RX_FRAMING_ERRORS)
+    if(HAL_usart_check(MARLIN_SERIAL, USART_FE)) {
+	UPDATE_RX_FRAMING_ERRORS();
+	HAL_usart_clear(MARLIN_SERIAL, USART_FE);
+    }
+#endif
+}
+
+#endif // MARLIN_SERIAL_is_(USART1|USART2)
 
 
 /*
